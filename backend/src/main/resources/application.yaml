@@ -1,0 +1,94 @@
+server:
+  address: ${SERVER_ADDRESS:0.0.0.0}
+  port: ${SERVER_PORT:8082}
+  forward-headers-strategy: framework
+
+app:
+  instance-id: ${APP_INSTANCE_ID:}
+
+auth:
+  google-client-id: ${GOOGLE_DESKTOP_CLIENT_ID:497109317936-vq9miqm7uib002q94hthnl04652rau58.apps.googleusercontent.com}
+  jwt-secret: ${AUTH_JWT_SECRET:}
+  issuer: ${AUTH_JWT_ISSUER:revealz-backend}
+  audience: ${AUTH_JWT_AUDIENCE:revealz-windows}
+  access-seconds: ${AUTH_ACCESS_SECONDS:900}
+  refresh-seconds: ${AUTH_REFRESH_SECONDS:604800}
+  login-attempt-seconds: ${AUTH_LOGIN_ATTEMPT_SECONDS:300}
+  login-attempt-limit: ${AUTH_LOGIN_ATTEMPT_LIMIT:1000}
+
+spring:
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+  jpa:
+    open-in-view: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        boot:
+          allow_jdbc_metadata_access: false
+  sql:
+    init:
+      mode: never
+  data:
+    redis:
+      host: ${CATALOG_CACHE_HOST:localhost}
+      port: ${CATALOG_CACHE_PORT:6379}
+      connect-timeout: ${CATALOG_CACHE_CONNECT_TIMEOUT:300ms}
+      timeout: ${CATALOG_CACHE_COMMAND_TIMEOUT:300ms}
+      repositories:
+        enabled: false
+
+catalog:
+  cache:
+    enabled: ${CATALOG_CACHE_ENABLED:false}
+    ttl-seconds: ${CATALOG_CACHE_TTL_SECONDS:30}
+  datasource:
+    url: ${CATALOG_DATABASE_URL:}
+    username: ${CATALOG_DATABASE_USERNAME:}
+    password: ${CATALOG_DATABASE_PASSWORD:}
+    maximum-pool-size: ${CATALOG_DATABASE_MAX_POOL_SIZE:5}
+    connection-timeout-ms: ${CATALOG_DATABASE_CONNECTION_TIMEOUT_MS:2000}
+
+lobby:
+  public-host: ${LOBBY_PUBLIC_HOST:127.0.0.1}
+  port-start: ${LOBBY_PORT_START:7700}
+  port-end: ${LOBBY_PORT_END:7799}
+  room-ttl-ms: ${ROOM_TTL_MS:600000}
+  match-timeout-ms: ${MATCH_TIMEOUT_MS:60000}
+  worker-ready-ms: ${WORKER_READY_MS:120000}
+  warm-pool-size: ${WARM_POOL_SIZE:0}
+  worker-bin: ${WORKER_BIN:}
+  meta-lobby-url: ${META_LOBBY_URL:http://127.0.0.1:8080}
+  credential-grace-ms: ${MATCH_LOG_CREDENTIAL_GRACE_MS:300000}
+  admission-seconds: ${AUTH_ADMISSION_SECONDS:60}
+
+match-log:
+  max-bytes: ${MATCH_LOG_MAX_BYTES:8388608}
+
+ops:
+  token: ${OPS_TOKEN:}
+  data-dir: ${OPS_DATA_DIR:./ops-data}
+  pg-dump: ${PG_DUMP:pg_dump}
+  pg-restore: ${PG_RESTORE:pg_restore}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,catalogDatabase
+
+logging:
+  pattern:
+    level: "%5p [requestId:%X{requestId:-}]"

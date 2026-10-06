@@ -1,0 +1,64 @@
+limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/s;
+
+log_format revealz '$remote_addr - $remote_user [$time_local] '
+                   '"$request_method $uri $server_protocol" $status $body_bytes_sent '
+                   '"$http_user_agent"';
+
+upstream spring_backend {
+    server 127.0.0.1:8080;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${API_DOMAIN};
+    access_log /var/log/nginx/access.log revealz;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 308 https://${API_DOMAIN}$uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${API_DOMAIN};
+    server_tokens off;
+    access_log /var/log/nginx/access.log revealz;
+
+    if ($host != ${API_DOMAIN}) { return 444; }
+
+    ssl_certificate /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    client_max_body_size 8m;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location ^~ /v1/internal/ { return 404; }
+    location ^~ /actuator/ { return 404; }
+    location = /ops { return 404; }
+    location ^~ /ops/ { return 404; }
+    location ^~ /v1/ops/ { return 404; }
+
+    location ^~ /v1/auth/ {
+        limit_req zone=auth burst=10 nodelay;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://spring_backend;
+        include /etc/nginx/proxy_params;
+    }
+
+    location ^~ /v1/ {
+        proxy_pass http://spring_backend;
+        include /etc/nginx/proxy_params;
+    }
+
+    location / { return 404; }
+}

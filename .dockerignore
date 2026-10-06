@@ -2,8 +2,8 @@
 .github
 .cursor
 **/node_modules
+ops-data
 lobby/ops-data
-lobby/.env
 **/.env
 export
 *.md

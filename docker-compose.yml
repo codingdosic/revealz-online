@@ -1,9 +1,8 @@
-# Hetzner Linux VM. lobby/poller use host network (UDP 7700–7799 spawn).
-# Postgres is bound to loopback only — do not publish 5432 on a public interface.
+# Default single-VM Spring stack. PostgreSQL and Redis stay loopback-only.
 services:
   postgres:
     image: postgres:16
-    env_file: lobby/.env
+    env_file: ${REVEALZ_ENV_FILE:-.env}
     environment:
       POSTGRES_DB: revealz_meta
       POSTGRES_USER: revealz_meta
@@ -18,17 +17,61 @@ services:
       retries: 12
 
   lobby:
+    image: ${REVEALZ_SPRING_IMAGE:-revealz-backend:latest}
     build:
       context: .
-      dockerfile: lobby/Dockerfile
+      dockerfile: backend/Dockerfile.production
     network_mode: host
-    env_file: lobby/.env
+    env_file: ${REVEALZ_ENV_FILE:-.env}
+    environment:
+      SERVER_ADDRESS: 127.0.0.1
+      SERVER_PORT: 8080
+      OPS_DATA_DIR: /app/ops-data
+      CARD_RESOURCES_PATH: /app/resources/cards
     volumes:
-      - ./export:/app/export
-      - ./lobby/ops-data:/app/lobby/ops-data
+      - ./export:/app/export:ro
+      - ${REVEALZ_OPS_DATA_DIR:-./ops-data}:/app/ops-data
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  redis:
+    image: redis:8.8.3-alpine3.23
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  nginx:
+    profiles: ["https"]
+    image: nginx:1.29-alpine
+    network_mode: host
+    env_file: ${REVEALZ_ENV_FILE:-.env}
+    environment:
+      NGINX_ENVSUBST_FILTER: API_DOMAIN
+    volumes:
+      - ./infra/backend-prod/nginx/revealz.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./infra/backend-prod/nginx/proxy_params:/etc/nginx/proxy_params:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      - lobby
+    restart: unless-stopped
+
+  certbot:
+    profiles: ["https"]
+    image: certbot/certbot:v5.8.0
+    network_mode: host
+    env_file: ${REVEALZ_ENV_FILE:-.env}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
 
   poller:
     build:
@@ -38,7 +81,7 @@ services:
     pid: host
     volumes:
       - ./tools/ops_health_poll.py:/poll.py:ro
-      - ./lobby/ops-data:/data
+      - ${REVEALZ_OPS_DATA_DIR:-./ops-data}:/data
     command:
       [
         "python",
@@ -54,3 +97,7 @@ services:
 
 volumes:
   pgdata:
+    external: true
+    name: revealz_pgdata
+  letsencrypt:
+  certbot_webroot:

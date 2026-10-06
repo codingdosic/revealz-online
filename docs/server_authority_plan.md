@@ -1,5 +1,7 @@
 # 서버 권위 전환 — 단계별 구현 계획
 
+> **기록 상태:** Node 로비 시절의 전환 계획을 보존한 문서다. 현재 구현은 Java 21 / Spring Boot 단일 백엔드이며, 최신 구조는 [`README.md`](../README.md#아키텍처)를 기준으로 한다.
+
 의사결정 배경: [`server_authority_decisions.md`](./server_authority_decisions.md)
 
 **브랜치:** `feature/server-authority`  
@@ -26,7 +28,7 @@
 
 | # | 항목 | 설명 | 우선 |
 |---|---|---|---|
-| A1 | **Dedicated Linux export → VM scp → lobby restart** | 3·4단계(덱 validate, Meta 프로필)가 **프로덕션 Dedicated**에 반영됨. Host/에디터는 소스만으로 동작. 절차: [`SERVER_OPS.md`](../SERVER_OPS.md) §4 | 높음 |
+| A1 | **Dedicated Linux export → VM scp → lobby restart** | 당시 3·4단계 배포 잔여 항목. 현재 운영 절차는 공개 저장소에 포함하지 않는다. | 높음 |
 | A2 | **ops/db 상품 CRUD UI** | `shop_products`를 ops 페이지에서 수정. 지금은 SQL/시드만. 가격·풀 운영 변경용 | 중 |
 | A3 | **PR → main 머지** | `feature/server-authority` 리뷰 후 merge. VM은 pull + `docker compose build lobby && up` | 중 |
 | A4 | (선택) PUT 스냅샷 추가 축소 | wallet/owned 클라 PUT 경로 더 줄이기. 구매·프로필은 이미 전용 API | 낮 |

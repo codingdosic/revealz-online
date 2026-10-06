@@ -1,26 +1,11 @@
 @echo off
 setlocal
 cd /d "%~dp0.."
-if not exist "lobby\ops.env.bat" (
-  echo Missing lobby\ops.env.bat
-  echo Copy lobby\ops.env.example.bat to lobby\ops.env.bat and fill OPS_TOKEN / META_DATABASE_URL.
-  pause
+if not exist ".env" (
+  echo Missing repository-root .env. Copy .env.example and fill secrets first.
   exit /b 1
 )
-cd /d "%~dp0..\lobby"
-call ops.env.bat
-if "%OPS_TOKEN%"=="" (
-  echo OPS_TOKEN is empty in lobby\ops.env.bat
-  pause
-  exit /b 1
-)
-if "%OPS_TOKEN%"=="change-me" (
-  echo OPS_TOKEN is still the example value. Edit lobby\ops.env.bat
-  pause
-  exit /b 1
-)
-echo Starting lobby in %CD%
-echo Public host=%LOBBY_PUBLIC_HOST%
-call npm start
-echo Lobby exited.
-pause
+docker volume inspect revealz_pgdata >nul 2>&1 || docker volume create revealz_pgdata >nul
+docker compose up -d postgres redis lobby
+if errorlevel 1 exit /b 1
+echo Spring backend started. Check http://127.0.0.1:8080/v1/health

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>revealz ops</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; background: #111; color: #eee; margin: 1.5rem; }
+    h1 { font-size: 1.2rem; margin: 0 0 .5rem; }
+    a { color: #8cf; }
+    .meta { color: #aaa; margin-bottom: 1rem; }
+    .warn { color: #fc6; }
+    .bad { color: #f88; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; margin: 1rem 0; }
+    .card, .chart { background: #1c1c1c; border: 1px solid #333; padding: .7rem .8rem; border-radius: 6px; }
+    .card b { display: block; font-size: 1.3rem; overflow-wrap: anywhere; }
+    .card span, .range { color: #888; font-size: .8rem; }
+    .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .8rem; margin: 1.2rem 0; }
+    .chart h3 { margin: 0 0 .4rem; font-size: .9rem; font-weight: 600; }
+    .chart h3 small { color: #8cf; font-weight: 400; }
+    .chart svg { width: 100%; height: 88px; display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { text-align: left; padding: .35rem .4rem; border-bottom: 1px solid #333; }
+    tr.bad td { color: #f88; }
+  </style>
+</head>
+<body>
+  <h1>revealz lobby monitor</h1>
+  <p><a id="nav-monitor" href="/ops">모니터</a> · <a id="nav-db" href="/ops/db">계정/DB</a></p>
+  <div class="meta"><span id="collected">불러오는 중…</span> · <span id="refresh">live 요청 대기</span></div>
+  <div class="grid">
+    <div class="card"><span>rooms</span><b data-field="rooms">—</b></div>
+    <div class="card"><span>queue</span><b data-field="queueSize">—</b></div>
+    <div class="card"><span>warm ready</span><b data-field="warmReady">—</b></div>
+    <div class="card"><span>warm spawn</span><b data-field="warmSpawning">—</b></div>
+    <div class="card"><span>free ports</span><b data-field="freePorts">—</b></div>
+    <div class="card"><span>metaDb</span><b id="meta-db">—</b></div>
+    <div class="card"><span>maintenance</span><b id="maintenance">—</b></div>
+    <div class="card"><span>version</span><b id="version">—</b></div>
+    <div class="card"><span>worker sha256</span><b id="worker">—</b></div>
+  </div>
+  <p id="live-health" class="warn">live health 확인 중…</p>
+  <div class="charts" id="charts"></div>
+  <table>
+    <thead><tr><th>ts</th><th>ok</th><th>rooms</th><th>queue</th><th>warm</th><th>ports</th><th>cpu%</th><th>mem MB</th></tr></thead>
+    <tbody id="recent-rows"><tr><td colspan="8">불러오는 중…</td></tr></tbody>
+  </table>
+  <script>
+    const token = new URLSearchParams(location.search).get("token") || "";
+    const suffix = token ? "?token=" + encodeURIComponent(token) : "";
+    document.getElementById("nav-monitor").href = "/ops" + suffix;
+    document.getElementById("nav-db").href = "/ops/db" + suffix;
+
+    function text(value) {
+      return value === null || value === undefined || value === "" ? "—" : String(value);
+    }
+
+    function number(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function cell(row, value) {
+      const td = document.createElement("td");
+      td.textContent = text(value);
+      row.appendChild(td);
+    }
+
+    function renderTable(recent) {
+      const root = document.getElementById("recent-rows");
+      root.replaceChildren();
+      if (!recent.length) {
+        const row = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 8;
+        td.textContent = "기록 없음";
+        row.appendChild(td);
+        root.appendChild(row);
+        return;
+      }
+      recent.slice().reverse().forEach((item) => {
+        const row = document.createElement("tr");
+        if (item.ok !== true) row.className = "bad";
+        const host = item.host && typeof item.host === "object" ? item.host : {};
+        const memory = host.memUsedMb == null || host.memTotalMb == null
+          ? null : host.memUsedMb + "/" + host.memTotalMb;
+        cell(row, item.ts || item.time);
+        cell(row, item.ok === true ? "ok" : item.error || "fail");
+        cell(row, item.rooms);
+        cell(row, item.queueSize);
+        cell(row, item.warmReady);
+        cell(row, item.freePorts);
+        cell(row, host.cpuPct);
+        cell(row, memory);
+        root.appendChild(row);
+      });
+    }
+
+    function chart(title, values) {
+      const box = document.createElement("div");
+      box.className = "chart";
+      const heading = document.createElement("h3");
+      heading.textContent = title + " ";
+      const usable = values.filter((value) => value !== null);
+      const latest = document.createElement("small");
+      latest.textContent = usable.length ? text(usable[usable.length - 1]) : "";
+      heading.appendChild(latest);
+      box.appendChild(heading);
+      if (!usable.length) {
+        const empty = document.createElement("div");
+        empty.className = "range";
+        empty.textContent = "데이터 없음";
+        box.appendChild(empty);
+        return box;
+      }
+      const width = 320, height = 80, padding = 10;
+      const min = Math.min(...usable), max = Math.max(...usable), span = max - min || 1;
+      const points = [];
+      values.forEach((value, index) => {
+        if (value === null) return;
+        const x = padding + index / Math.max(values.length - 1, 1) * (width - 2 * padding);
+        const y = height - padding - (value - min) / span * (height - 2 * padding);
+        points.push(x.toFixed(1) + "," + y.toFixed(1));
+      });
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      svg.setAttribute("preserveAspectRatio", "none");
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      line.setAttribute("fill", "none");
+      line.setAttribute("stroke", "#6cf");
+      line.setAttribute("stroke-width", "2");
+      line.setAttribute("points", points.join(" "));
+      svg.appendChild(line);
+      box.appendChild(svg);
+      const range = document.createElement("div");
+      range.className = "range";
+      range.textContent = min + " – " + max + " · " + usable.length + " pts";
+      box.appendChild(range);
+      return box;
+    }
+
+    function renderCharts(recent) {
+      const root = document.getElementById("charts");
+      root.replaceChildren();
+      const hostValue = (row, field) => row.host && typeof row.host === "object" ? number(row.host[field]) : null;
+      [
+        ["rooms", recent.map((row) => number(row.rooms))],
+        ["queue", recent.map((row) => number(row.queueSize))],
+        ["warm ready", recent.map((row) => number(row.warmReady))],
+        ["free ports", recent.map((row) => number(row.freePorts))],
+        ["cpu %", recent.map((row) => hostValue(row, "cpuPct"))],
+        ["mem MB", recent.map((row) => hostValue(row, "memUsedMb"))]
+      ].forEach(([title, values]) => root.appendChild(chart(title, values)));
+    }
+
+    function render(data) {
+      const now = data.now && typeof data.now === "object" ? data.now : {};
+      document.querySelectorAll("[data-field]").forEach((element) => {
+        element.textContent = text(now[element.dataset.field]);
+      });
+      document.getElementById("collected").textContent = text(data.collected);
+      document.getElementById("meta-db").textContent = now.metaDb === true ? "on" : now.metaDb === false ? "off" : "—";
+      document.getElementById("maintenance").textContent = now.maintenance === true ? "ON" : now.maintenance === false ? "off" : "—";
+      const version = now.version && typeof now.version === "object" ? now.version : null;
+      document.getElementById("version").textContent = version ? "protocol " + text(version.protocol) + " · lobby " + text(version.lobby) : "—";
+      const worker = now.worker && typeof now.worker === "object" ? now.worker : null;
+      document.getElementById("worker").textContent = worker && worker.present === true
+        ? text(worker.sha256).slice(0, 12) + "…" : worker && worker.present === false ? "missing" : "—";
+      const health = document.getElementById("live-health");
+      health.textContent = "live health ok=" + (now.ok === true ? "true" : now.ok === false ? "false" : "unknown");
+      health.className = now.ok === true ? "" : "warn";
+      const recent = Array.isArray(data.recent)
+        ? data.recent.filter((row) => row && typeof row === "object") : [];
+      renderCharts(recent);
+      renderTable(recent);
+    }
+
+    async function refresh() {
+      const status = document.getElementById("refresh");
+      try {
+        const response = await fetch("/v1/ops/monitor" + suffix, {
+          headers: token ? { "X-Ops-Token": token } : {}
+        });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        render(await response.json());
+        status.textContent = "live 갱신 " + new Date().toLocaleTimeString();
+        status.className = "";
+      } catch (error) {
+        status.textContent = "요청 실패: " + error.message;
+        status.className = "bad";
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

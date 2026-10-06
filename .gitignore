@@ -16,9 +16,9 @@
 # Android release keystores
 android/*.keystore
 
-# Lobby Node deps + local ops logs
-/lobby/node_modules/
-/lobby/ops-data/
+# Legacy Node deps + active local ops logs
+/legacy/node-lobby/node_modules/
+/ops-data/
 
 # Editor / OS
 .cursor/
@@ -27,12 +27,13 @@ Thumbs.db
 .DS_Store
 __pycache__/
 *.pyc
+/backend/target/
 
 # Secrets
 .env
 .env.*
 !.env.example
 !**/.env.example
-/lobby/ops.env.bat
+/legacy/node-lobby/ops.env.bat
 *.pem
 *.key

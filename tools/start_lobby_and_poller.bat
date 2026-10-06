@@ -1,5 +1,11 @@
 @echo off
-REM Opens lobby and poller in two windows. Does not start them in the background as services.
-cd /d "%~dp0"
-start "revealz-lobby" "%~dp0start_lobby.bat"
-start "revealz-poller" "%~dp0start_poller.bat"
+setlocal
+cd /d "%~dp0.."
+if not exist ".env" (
+  echo Missing repository-root .env. Copy .env.example and fill secrets first.
+  exit /b 1
+)
+docker volume inspect revealz_pgdata >nul 2>&1 || docker volume create revealz_pgdata >nul
+docker compose up -d postgres redis lobby poller
+if errorlevel 1 exit /b 1
+echo Spring backend and poller started.

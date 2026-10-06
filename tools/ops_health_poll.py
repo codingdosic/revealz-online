@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Poll lobby GET /v1/health into lobby/ops-data/health.jsonl. Does not start Node."""
+"""Poll the backend health endpoint into ops-data/health.jsonl."""
 
 from __future__ import annotations
 

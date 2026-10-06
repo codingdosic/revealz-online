@@ -1,0 +1,136 @@
+name: revealz-backend-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: revealz_meta
+      POSTGRES_USER: revealz_meta
+      POSTGRES_PASSWORD: local-node-only
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - backend_local_pg:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U revealz_meta -d revealz_meta"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  node:
+    build:
+      context: ../..
+      dockerfile: legacy/node-lobby/Dockerfile
+    environment:
+      LOBBY_BIND: 0.0.0.0
+      LOBBY_HTTP_PORT: 8080
+      LOBBY_PUBLIC_HOST: 127.0.0.1
+      META_DATABASE_URL: postgres://revealz_meta:local-node-only@postgres:5432/revealz_meta
+      WARM_POOL_SIZE: 0
+      WORKER_BIN: ""
+      GODOT_BIN: ""
+    ports:
+      - "127.0.0.1:18081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  catalog-grants:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: local-node-only
+    depends_on:
+      node:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/bootstrap/grant-catalog-read.sh"]
+    volumes:
+      - ./grant-catalog-read.sh:/bootstrap/grant-catalog-read.sh:ro
+    restart: "no"
+
+  redis:
+    image: redis:8.8.3-alpine3.23
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  spring:
+    image: revealz-catalog-backend-local
+    build:
+      context: ../../backend
+    environment:
+      SERVER_PORT: 8082
+      APP_INSTANCE_ID: spring-a
+      SPRING_PROFILES_ACTIVE: local-account
+      CATALOG_CACHE_ENABLED: ${CATALOG_CACHE_ENABLED:-true}
+      CATALOG_CACHE_HOST: redis
+      CATALOG_DATABASE_URL: jdbc:postgresql://postgres:5432/revealz_meta
+      CATALOG_DATABASE_USERNAME: revealz_catalog
+      CATALOG_DATABASE_PASSWORD: local-catalog-only
+      CATALOG_DATABASE_MAX_POOL_SIZE: 5
+    ports:
+      - "127.0.0.1:18082:8082"
+    depends_on:
+      catalog-grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8082/actuator/health/readiness"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  spring-b:
+    image: revealz-catalog-backend-local
+    pull_policy: never
+    environment:
+      SERVER_PORT: 8082
+      APP_INSTANCE_ID: spring-b
+      SPRING_PROFILES_ACTIVE: local-account
+      CATALOG_CACHE_ENABLED: ${CATALOG_CACHE_ENABLED:-true}
+      CATALOG_CACHE_HOST: redis
+      CATALOG_DATABASE_URL: jdbc:postgresql://postgres:5432/revealz_meta
+      CATALOG_DATABASE_USERNAME: revealz_catalog
+      CATALOG_DATABASE_PASSWORD: local-catalog-only
+      CATALOG_DATABASE_MAX_POOL_SIZE: 5
+    ports:
+      - "127.0.0.1:18083:8082"
+    depends_on:
+      catalog-grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8082/actuator/health/readiness"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  nginx:
+    image: nginx:1.29-alpine
+    environment:
+      CATALOG_UPSTREAM: ${CATALOG_UPSTREAM:-spring_catalog}
+      NGINX_ENVSUBST_FILTER: CATALOG_UPSTREAM
+    ports:
+      - "127.0.0.1:18080:80"
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      node:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1/v1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  backend_local_pg:

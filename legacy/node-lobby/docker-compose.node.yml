@@ -1,0 +1,36 @@
+name: revealz-node-rollback
+
+# Emergency legacy runtime only. The active root Compose keeps PostgreSQL running.
+services:
+  lobby:
+    image: ${REVEALZ_NODE_IMAGE:?set REVEALZ_NODE_IMAGE to the preserved rollback tag}
+    build:
+      context: ../..
+      dockerfile: legacy/node-lobby/Dockerfile
+    network_mode: host
+    env_file: ${REVEALZ_ENV_FILE:-../../.env}
+    volumes:
+      - ../../export:/app/export
+      - ${REVEALZ_OPS_DATA_DIR:-../../ops-data}:/app/lobby/ops-data
+
+  poller:
+    build:
+      context: ../..
+      dockerfile: tools/poller.Dockerfile
+    network_mode: host
+    pid: host
+    volumes:
+      - ../../tools/ops_health_poll.py:/poll.py:ro
+      - ${REVEALZ_OPS_DATA_DIR:-../../ops-data}:/data
+    command:
+      [
+        "python",
+        "-u",
+        "/poll.py",
+        "--url",
+        "http://127.0.0.1:8080/v1/health",
+        "--out",
+        "/data/health.jsonl",
+      ]
+    depends_on:
+      - lobby
