@@ -25,4 +25,6 @@ jobs:
           cache: maven
       - name: Unit and DB integration tests
         working-directory: backend
+        env:
+          AUTH_JWT_SECRET: ci-only-test-secret-at-least-32-bytes
         run: bash ./mvnw --batch-mode --no-transfer-progress test
