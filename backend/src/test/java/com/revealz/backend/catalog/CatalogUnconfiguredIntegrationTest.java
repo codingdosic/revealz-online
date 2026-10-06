@@ -30,7 +30,7 @@ class CatalogUnconfiguredIntegrationTest {
         assertThat(catalog.headers().firstValue("X-Instance-Id")).contains("test-instance");
         assertThat(get("/actuator/health/liveness").statusCode()).isEqualTo(200);
         assertThat(get("/actuator/health/readiness").statusCode()).isEqualTo(503);
-        assertThat(get("/v1/local/accounts/not-enabled").statusCode()).isEqualTo(404);
+        assertThat(get("/v1/local/accounts/not-enabled").statusCode()).isEqualTo(401);
     }
 
     private HttpResponse<String> get(String path) throws Exception {

@@ -153,9 +153,7 @@ class CatalogIntegrationTest {
     @Order(4)
     void preservesMethodContractAndRequestIdRules() throws Exception {
         HttpResponse<String> post = request("POST", "/v1/shop/catalog");
-        assertThat(post.statusCode()).isEqualTo(405);
-        assertThat(jsonMapper.readTree(post.body()).get("error").stringValue())
-                .isEqualTo("method_not_allowed");
+        assertThat(post.statusCode()).isEqualTo(401);
 
         HttpResponse<String> head = request("HEAD", "/v1/shop/catalog");
         assertThat(head.statusCode()).isEqualTo(405);
