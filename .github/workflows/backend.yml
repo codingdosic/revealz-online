@@ -25,4 +25,4 @@ jobs:
           cache: maven
       - name: Unit and DB integration tests
         working-directory: backend
-        run: ./mvnw --batch-mode --no-transfer-progress test
+        run: bash ./mvnw --batch-mode --no-transfer-progress test
