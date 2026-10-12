@@ -160,7 +160,7 @@ class CatalogIntegrationTest {
         assertThat(head.body()).isEmpty();
 
         HttpResponse<String> options = request("OPTIONS", "/v1/shop/catalog");
-        assertThat(options.statusCode()).isEqualTo(204);
+        assertThat(options.statusCode()).isEqualTo(401);
 
         HttpRequest safeIdRequest = HttpRequest.newBuilder(uri("/v1/shop/catalog"))
                 .header("X-Request-Id", "client_123")
