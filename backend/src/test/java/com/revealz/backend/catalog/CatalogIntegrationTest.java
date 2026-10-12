@@ -156,7 +156,7 @@ class CatalogIntegrationTest {
         assertThat(post.statusCode()).isEqualTo(401);
 
         HttpResponse<String> head = request("HEAD", "/v1/shop/catalog");
-        assertThat(head.statusCode()).isEqualTo(405);
+        assertThat(head.statusCode()).isEqualTo(401);
         assertThat(head.body()).isEmpty();
 
         HttpResponse<String> options = request("OPTIONS", "/v1/shop/catalog");
